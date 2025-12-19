@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Happy Birthday Dad</title>
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;600&family=Playfair+Display:wght@400;600&family=Montserrat:wght@300;400;500&display=swap" rel="stylesheet">
+
+  <!-- Upload -> server scripts -->
+  <script>
+    // Configure: same-origin API endpoints
+    const API_BASE = '';
+
+    async function savePhotoFile(file) {
+      const fd = new FormData();
+      fd.append('photo', file);
+      const res = await fetch(API_BASE + '/upload', { method: 'POST', body: fd });
+      if (!res.ok) {
+        let body = '';
+        try { body = await res.text(); } catch (e) { body = '<no body>'; }
+        throw new Error('Upload failed: ' + res.status + ' ' + res.statusText + ' - ' + body);
+      }
+      return res.json(); // { id, name, url }
+    }
+
+    async function getAllPhotos() {
+      const res = await fetch(API_BASE + '/photos');
+      if (!res.ok) return [];
+      return res.json(); // [{id, name, url}, ...]
+    }
+
+    function createPhotoElementFromRecord(rec) {
+      const wrap = document.createElement('div');
+      wrap.className = 'photo';
+      wrap.style.setProperty('--rotate', '0deg');
+      const img = document.createElement('img');
+      img.alt = rec.name || 'Photo';
+      if (rec.url) {
+        img.src = rec.url;
+      } else if (rec.blob) {
+        img.src = URL.createObjectURL(rec.blob);
+      }
+      img.style.setProperty('--dx', (Math.random() * 10 - 5) + 'px');
+      img.style.setProperty('--dy', (Math.random() * 10 - 5) + 'px');
+      wrap.appendChild(img);
+      if (rec.id) wrap.dataset.id = String(rec.id);
+      // remove button
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'remove-btn';
+      removeBtn.title = 'Remove photo';
+      removeBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+      removeBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!rec.id) { if (confirm('Remove this photo?')) wrap.remove(); return; }
+        if (!confirm('Delete this photo from the server? This is permanent.')) return;
+        try {
+          const dres = await fetch(API_BASE + '/photos/' + encodeURIComponent(rec.id), { method: 'DELETE' });
+          if (!dres.ok) throw new Error('Delete failed');
+          wrap.remove();
+        } catch (err) {
+          console.warn('Failed to delete photo', err);
+          alert('Delete failed; see console.');
+        }
+      });
+      wrap.appendChild(removeBtn);
+      const caption = document.createElement('div');
+      caption.className = 'caption';
+      caption.textContent = rec.name || '';
+      wrap.appendChild(caption);
+      return wrap;
+    }
+
+    async function loadStoredPhotosIntoGallery() {
+      try {
+        const photos = await getAllPhotos();
+        if (!photos || photos.length === 0) return;
+        const gallery = document.querySelector('.gallery');
+        photos.forEach(rec => gallery.appendChild(createPhotoElementFromRecord(rec)));
+      } catch (e) { console.warn('Failed to load photos', e); }
+    }
+
+    function setupUpload() {
+      const input = document.getElementById('photo-input');
+      const gallery = document.querySelector('.gallery');
+      if (!input || !gallery) return; // will be called after DOM is ready
+      input.addEventListener('change', async (ev) => {
+        const files = Array.from(ev.target.files || []);
+        for (const f of files) {
+          try {
+            const rec = await savePhotoFile(f);
+            gallery.appendChild(createPhotoElementFromRecord(rec));
+          } catch (err) { console.warn('Upload failed', err); alert('Upload failed'); }
+        }
+      });
+      gallery.addEventListener('dragover', (e) => { e.preventDefault(); gallery.style.opacity = 0.9; });
+      gallery.addEventListener('dragleave', (e) => { gallery.style.opacity = 1; });
+      gallery.addEventListener('drop', async (e) => {
+        e.preventDefault(); gallery.style.opacity = 1;
+        const dt = e.dataTransfer; if (!dt) return;
+        const files = Array.from(dt.files || []).filter(f => f.type.startsWith('image/'));
+        for (const f of files) {
+          try {
+            const rec = await savePhotoFile(f);
+            gallery.appendChild(createPhotoElementFromRecord(rec));
+          } catch (err) { console.warn('Upload failed', err); alert('Upload failed'); }
+        }
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => { loadStoredPhotosIntoGallery(); setupUpload(); });
+  </script>
+  <style>
+    :root {
+      --bg: #f3f7f4;
+      --paper: #ffffff;
+      --text: #1f2d24;
+      --accent: #1e7f4f; /* richer golf green */
+      --accent-light: #e6f2ec;
+      --shadow: rgba(0,0,0,0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at top left, rgba(30,127,79,0.08), transparent 40%),
+        radial-gradient(circle at bottom right, rgba(30,127,79,0.06), transparent 45%),
+        var(--bg);
+      color: var(--text);
+      font-family: 'Montserrat', sans-serif;
+      line-height: 1.7;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: auto;
+      padding: 40px 20px 80px;
+    }
+
+    /* HERO */
+    .hero {
+      text-align: center;
+      margin-bottom: 70px;
+      padding: 60px 20px;
+      background: linear-gradient(180deg, var(--accent-light), transparent);
+      border-radius: 18px;
+    }
+
+    .hero h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: 3.2rem;
+      margin-bottom: 12px;
+      letter-spacing: 0.5px;
+    }
+
+    .hero p {
+      font-size: 1rem;
+      opacity: 0.8;
+    }
+
+    /* LETTER */
+    .letter {
+      background: var(--paper);
+      padding: 55px 45px;
+      box-shadow: 0 20px 45px var(--shadow);
+      border-radius: 10px;
+      margin-bottom: 80px;
+      position: relative;
+      border-left: 6px solid var(--accent);
+    }
+
+    .letter h2 {
+      font-family: 'Playfair Display', serif;
+      margin-bottom: 25px;
+      color: var(--accent);
+    }
+
+    .letter p {
+      font-family: 'Dancing Script', cursive;
+      font-size: 1.6rem;
+      margin-bottom: 25px;
+    }
+
+    .signature {
+      margin-top: 40px;
+      font-family: 'Dancing Script', cursive;
+      font-size: 1.8rem;
+    }
+
+    /* GALLERY */
+    .gallery-title {
+      text-align: center;
+      font-family: 'Playfair Display', serif;
+      margin-bottom: 50px;
+      position: relative;
+    }
+
+    .gallery-title::after {
+      content: "";
+      display: block;
+      width: 80px;
+      height: 3px;
+      background: var(--accent);
+      margin: 14px auto 0;
+      border-radius: 2px;
+    }
+
+    .gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 30px;
+    }
+
+    .photo {
+      background: white;
+      padding: 14px;
+      box-shadow: 0 12px 28px var(--shadow);
+      transform: rotate(var(--rotate));
+      transition: transform 0.35s ease, box-shadow 0.35s ease;
+      border-radius: 6px;
+      border: 1px solid #e6e6e6;
+      position: relative;
+      overflow: visible;
+    }
+
+    .photo:hover {
+      transform: rotate(0deg) scale(1.06);
+      box-shadow: 0 18px 40px rgba(0,0,0,0.18);
+    }
+
+    .photo:hover {
+      transform: rotate(0deg) scale(1.05);
+    }
+
+    .photo img {
+      width: 100%;
+      display: block;
+      /* subtle floating translation using CSS variables per-photo */
+      animation: floatImg var(--dur, 9s) ease-in-out infinite;
+      transform-origin: 50% 50%;
+    }
+
+    /* remove button on photos */
+    .photo .remove-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.06);
+      color: var(--accent);
+      cursor: pointer;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+    }
+    .photo .remove-btn i { pointer-events: none; }
+
+    .caption {
+      margin-top: 10px;
+      font-size: 0.9rem;
+      text-align: center;
+      font-style: italic;
+    }
+
+    /* MUSIC TOGGLE */
+    .music-control {
+      position: fixed;
+      bottom: 22px;
+      right: 22px;
+      background: var(--paper);
+      padding: 12px 18px;
+      border-radius: 30px;
+      box-shadow: 0 10px 24px var(--shadow);
+      cursor: pointer;
+      font-size: 0.9rem;
+      user-select: none;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    @media (max-width: 600px) {
+      .letter p {
+        font-size: 1.4rem;
+      }
+    }
+      /* FLOATING GOLF ICONS */
+    .golf-icon {
+      position: absolute;
+      opacity: 0.08;
+      animation: float 12s ease-in-out infinite;
+    }
+
+    .golf-icon.one { top: 80px; left: 40px; animation-duration: 14s; }
+    .golf-icon.two { top: 320px; right: 60px; animation-duration: 16s; }
+    .golf-icon.three { bottom: 260px; left: 80px; animation-duration: 18s; }
+    .golf-icon.four { bottom: 120px; right: 90px; animation-duration: 20s; }
+
+    @keyframes float {
+      0% { transform: translateY(0px); }
+      50% { transform: translateY(-18px); }
+      100% { transform: translateY(0px); }
+    }
+
+    /* Floating golf fav icons used around photos and header */
+    .golf-fav {
+      position: absolute;
+      width: 28px;
+      height: 28px;
+      opacity: 0.12;
+      pointer-events: none;
+      color: var(--accent);
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.5;
+      top: var(--fav-top, 8px);
+      left: var(--fav-left, 8px);
+      transform-origin: center;
+      animation: floatXY var(--fav-dur, 12s) ease-in-out infinite;
+    }
+
+    .golf-fav.slow { --fav-dur: 16s; }
+    .golf-fav.fast { --fav-dur: 9s; }
+
+    @keyframes floatXY {
+      0% { transform: translate(0,0) rotate(0deg); }
+      50% { transform: translate(var(--fav-x, 10px), var(--fav-y, -12px)) rotate(8deg); }
+      100% { transform: translate(0,0) rotate(0deg); }
+    }
+
+    /* Per-photo subtle image movement */
+    @keyframes floatImg {
+      0% { transform: translate(0,0); }
+      50% { transform: translate(var(--dx, 6px), var(--dy, -6px)); }
+      100% { transform: translate(0,0); }
+    }
+
+  </style>
+  <!-- Favicon (inline SVG) + Font Awesome for flat icons -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='10' fill='%231e7f4f'/%3E%3Ccircle cx='12' cy='9' r='3' fill='%23ffffff'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-pzw8XK1f8bW7ZP8sV7Y5z7n1K7g1e5xQf6e8eLk7Yb1sX8Jk6Yp9vZ3mV0x1Y1s9aQ6b6e6e6f6e6e6f6e6f==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+</head>
+<body>
+  <!-- page content -->
+  <!-- FLOATING GOLF ICONS -->
+  <svg class="golf-icon one" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 2v20" />
+    <path d="M12 4c4 1 6 3 6 6s-2 5-6 6" />
+  </svg>
+
+  <svg class="golf-icon two" width="90" height="90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+
+  <svg class="golf-icon three" width="70" height="70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 20h16" />
+    <path d="M12 4l6 4-6 4-6-4z" />
+  </svg>
+
+  <svg class="golf-icon four" width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 2v20" />
+  </svg>
+
+  <div class="container">
+    <!-- HERO -->
+    <section class="hero">
+      <h1>Happy Birthday, Dad</h1>
+      <p>Written early this morning, because today matters.</p>
+      <!-- small golf favs in hero -->
+      <svg class="golf-fav slow" style="--fav-top:12px; --fav-left:18px; --fav-x:8px; --fav-y:-10px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2v20" />
+        <path d="M12 4c4 1 6 3 6 6s-2 5-6 6" />
+      </svg>
+      <svg class="golf-fav fast" style="--fav-top:52px; --fav-left:80%; --fav-x:-10px; --fav-y:8px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+    </section>
+    <!-- Upload panel: allows selecting or dropping photos -->
+    <div class="upload-panel" style="text-align:center; margin:24px 0;">
+      <label style="display:inline-block; padding:10px 14px; border-radius:8px; background:var(--paper); box-shadow:0 6px 18px var(--shadow); cursor:pointer; border:1px solid #e6e6e6;">
+        + Add photos
+        <input id="photo-input" type="file" accept="image/*" multiple style="display:none;">
+      </label>
+      <div id="upload-hint" style="display:inline-block; margin-left:14px; color:rgba(0,0,0,0.6);">or drag & drop into the gallery</div>
+    </div>
+
+    <!-- LETTER -->
+    <section class="letter">
+      <h2>Dear Dad,</h2>
+
+      <p>
+        Today isn’t just about celebrating your birthday. It’s about celebrating the man you are, the life you’ve built, and the impact you’ve quietly had on everyone around you — especially us, your sons.
+      </p>
+
+      <p>
+        We’ve watched you move through life with discipline, purpose, and an understanding that success is built one deliberate step at a time. Through business, through challenges, through moments both loud and silent, you’ve shown us what consistency looks like.
+      </p>
+
+      <p>
+        Even in the simple moments — the calm of the morning, the patience of practice, the focus it takes to improve — we see lessons that will stay with us forever.
+      </p>
+
+      <p>
+        Thank you for being a guide, a protector, and a standard. Thank you for showing us how to think long-term, how to stay grounded, and how to carry ourselves with integrity.
+      </p>
+
+      <p>
+        Happy Birthday, Dad. We hope today reminds you how deeply appreciated you are.
+      </p>
+
+      <div class="signature">With love,<br />Ian , Immortal and Xavier</div>
+    </section>
+
+    <!-- GALLERY -->
+    <h2 class="gallery-title">Moments Through Time</h2>
+
+    <section class="gallery">
+      <div class="photo" style="--rotate: -3deg">
+        <img src="photo1.jpg" alt="Memory 1" />
+        <svg class="golf-fav" style="--fav-top:10px; --fav-left:10px; --fav-x:6px; --fav-y:-8px; --dx:-6px; --dy:6px; --dur:8s;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+        <div class="caption">BOSS LIFE.</div>
+      </div>
+
+      <div class="photo" style="--rotate: 2deg">
+        <img src="photo2.jpg" alt="Memory 2" />
+        <svg class="golf-fav slow" style="--fav-top:8px; --fav-left:calc(100% - 34px); --fav-x:-8px; --fav-y:6px; --dx:6px; --dy:-6px; --dur:10s;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2v20" />
+        </svg>
+        <div class="caption">It isn't a small world.</div>
+      </div>
+
+      <div class="photo" style="--rotate: -2deg">
+        <img src="photo3.jpg" alt="Memory 3" />
+        <svg class="golf-fav fast" style="--fav-top:6px; --fav-left:12px; --fav-x:10px; --fav-y:-6px; --dx:-4px; --dy:6px; --dur:7s;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 20h16" />
+        </svg>
+        <div class="caption">Lessons without words.</div>
+      </div>
+
+      <div class="photo" style="--rotate: 3deg">
+        <img src="photo4.jpg" alt="Memory 4" />
+        <svg class="golf-fav" style="--fav-top:8px; --fav-left:14px; --fav-x:-6px; --fav-y:8px; --dx:6px; --dy:-4px; --dur:11s;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2v20" />
+        </svg>
+        <div class="caption">Time well spent.</div>
+      </div>
+
+      <div class="photo" style="--rotate: -1deg">
+        <img src="photo5.jpg" alt="Memory 5" />
+        <svg class="golf-fav slow" style="--fav-top:10px; --fav-left:10px; --fav-x:6px; --fav-y:-8px; --dx:-5px; --dy:5px; --dur:13s;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+        <div class="caption">Calm under pressure.</div>
+      </div>
+
+      <div class="photo" style="--rotate: 2deg">
+        <img src="photo6.jpg" alt="Memory 6" />
+        <svg class="golf-fav fast" style="--fav-top:10px; --fav-left:calc(100% - 36px); --fav-x:-8px; --fav-y:10px; --dx:4px; --dy:-6px; --dur:9s;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+        <div class="caption">GROWTH.</div>
+      </div>
+    </section>
+  </div>
+
+  <!-- MUSIC -->
+  <audio id="bg-music" loop preload="metadata">
+    <source src="music.mp3" type="audio/mpeg" />
+  </audio>
+
+  <div class="music-control" onclick="toggleMusic()">🎵 Play music</div>
+
+  <script>
+    const music = document.getElementById('bg-music');
+    const control = document.querySelector('.music-control');
+    let playing = false;
+    let startedAtSix = false;
+
+    function startAtSixAndPlay() {
+      try {
+        music.currentTime = 6;
+      } catch (e) {
+        // Some browsers may throw if metadata isn't loaded yet; ignore and wait for event
+      }
+      startedAtSix = true;
+      music.play().catch(() => {});
+    }
+
+    function toggleMusic() {
+      if (!playing) {
+        if (!startedAtSix) {
+          if (music.readyState >= 1) {
+            startAtSixAndPlay();
+          } else {
+            const onMeta = function() {
+              startAtSixAndPlay();
+              music.removeEventListener('loadedmetadata', onMeta);
+            };
+            music.addEventListener('loadedmetadata', onMeta);
+          }
+        } else {
+          music.play().catch(() => {});
+        }
+        control.textContent = '⏸ Pause music';
+      } else {
+        music.pause();
+        control.textContent = '🎵 Play music';
+      }
+      playing = !playing;
+    }
+  </script>
+
+  
+
+</body>
+</html>
