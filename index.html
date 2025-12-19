@@ -8,27 +8,57 @@
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;600&family=Playfair+Display:wght@400;600&family=Montserrat:wght@300;400;500&display=swap" rel="stylesheet">
 
-  <!-- Upload -> server scripts -->
+  <!-- Client-side photo storage (IndexedDB) -->
   <script>
-    // Configure: same-origin API endpoints
-    const API_BASE = '';
+    const DB_NAME = 'birthday-photos-db';
+    const STORE_NAME = 'photos';
+
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = function(e) {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains(STORE_NAME)) {
+            db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+          }
+        };
+        req.onsuccess = function(e) { resolve(e.target.result); };
+        req.onerror = function(e) { reject(e.target.error); };
+      });
+    }
 
     async function savePhotoFile(file) {
-      const fd = new FormData();
-      fd.append('photo', file);
-      const res = await fetch(API_BASE + '/upload', { method: 'POST', body: fd });
-      if (!res.ok) {
-        let body = '';
-        try { body = await res.text(); } catch (e) { body = '<no body>'; }
-        throw new Error('Upload failed: ' + res.status + ' ' + res.statusText + ' - ' + body);
-      }
-      return res.json(); // { id, name, url }
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        const item = { name: file.name, blob: file, created: Date.now() };
+        const req = store.add(item);
+        req.onsuccess = () => resolve({ id: req.result, name: file.name, blob: file });
+        req.onerror = () => reject(req.error);
+      });
     }
 
     async function getAllPhotos() {
-      const res = await fetch(API_BASE + '/photos');
-      if (!res.ok) return [];
-      return res.json(); // [{id, name, url}, ...]
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const store = tx.objectStore(STORE_NAME);
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function deletePhotoById(id) {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        const req = store.delete(Number(id));
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
     }
 
     function createPhotoElementFromRecord(rec) {
@@ -36,32 +66,26 @@
       wrap.className = 'photo';
       wrap.style.setProperty('--rotate', '0deg');
       const img = document.createElement('img');
-      img.alt = rec.name || 'Photo';
-      if (rec.url) {
-        img.src = rec.url;
-      } else if (rec.blob) {
-        img.src = URL.createObjectURL(rec.blob);
-      }
+      img.alt = rec.name || 'Uploaded photo';
+      img.src = URL.createObjectURL(rec.blob);
       img.style.setProperty('--dx', (Math.random() * 10 - 5) + 'px');
       img.style.setProperty('--dy', (Math.random() * 10 - 5) + 'px');
-      wrap.appendChild(img);
       if (rec.id) wrap.dataset.id = String(rec.id);
-      // remove button
+      wrap.appendChild(img);
       const removeBtn = document.createElement('button');
       removeBtn.className = 'remove-btn';
       removeBtn.title = 'Remove photo';
       removeBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
       removeBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
-        if (!rec.id) { if (confirm('Remove this photo?')) wrap.remove(); return; }
-        if (!confirm('Delete this photo from the server? This is permanent.')) return;
+        if (!rec.id) { if (confirm('Remove this photo from the gallery?')) wrap.remove(); return; }
+        if (!confirm('Delete this photo? This will remove it permanently from your browser storage.')) return;
         try {
-          const dres = await fetch(API_BASE + '/photos/' + encodeURIComponent(rec.id), { method: 'DELETE' });
-          if (!dres.ok) throw new Error('Delete failed');
+          await deletePhotoById(rec.id);
           wrap.remove();
         } catch (err) {
           console.warn('Failed to delete photo', err);
-          alert('Delete failed; see console.');
+          alert('Could not delete photo. See console.');
         }
       });
       wrap.appendChild(removeBtn);
@@ -78,20 +102,20 @@
         if (!photos || photos.length === 0) return;
         const gallery = document.querySelector('.gallery');
         photos.forEach(rec => gallery.appendChild(createPhotoElementFromRecord(rec)));
-      } catch (e) { console.warn('Failed to load photos', e); }
+      } catch (e) { console.warn('Failed to load stored photos:', e); }
     }
 
     function setupUpload() {
       const input = document.getElementById('photo-input');
       const gallery = document.querySelector('.gallery');
-      if (!input || !gallery) return; // will be called after DOM is ready
+      if (!input || !gallery) return;
       input.addEventListener('change', async (ev) => {
         const files = Array.from(ev.target.files || []);
         for (const f of files) {
           try {
             const rec = await savePhotoFile(f);
             gallery.appendChild(createPhotoElementFromRecord(rec));
-          } catch (err) { console.warn('Upload failed', err); alert('Upload failed'); }
+          } catch (err) { console.warn('Save failed', err); alert('Save failed'); }
         }
       });
       gallery.addEventListener('dragover', (e) => { e.preventDefault(); gallery.style.opacity = 0.9; });
@@ -104,7 +128,7 @@
           try {
             const rec = await savePhotoFile(f);
             gallery.appendChild(createPhotoElementFromRecord(rec));
-          } catch (err) { console.warn('Upload failed', err); alert('Upload failed'); }
+          } catch (err) { console.warn('Save failed', err); alert('Save failed'); }
         }
       });
     }
